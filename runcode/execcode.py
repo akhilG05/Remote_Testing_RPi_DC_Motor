@@ -1,9 +1,8 @@
 import subprocess
-import sys
 import os
 import mmap
 from fabric import Connection
-from mysite.settings import pi_ip
+from mysite.settings import pi_ip, pi_pwd
 
 class RunPyCode(object):
     
@@ -13,7 +12,7 @@ class RunPyCode(object):
             os.mkdir('./runcode/running')
 
     def _run_py_prog(self, cmd="./osvi/a.py"):
-        p = subprocess.Popen("sshpass -p rpi ssh -p22 pi@"+pi_ip+" python3 "+cmd,
+        p = subprocess.Popen("python3 "+cmd,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         try:
             result = p.wait(timeout=20)
@@ -31,7 +30,7 @@ class RunPyCode(object):
             code = self.code
         with open(filename, "w") as f:
             f.write(code)
-        c = Connection(host=pi_ip, user='pi', connect_kwargs={'password': 'rpi'})
+        c = Connection(host=pi_ip, user='pi', connect_kwargs={'password': pi_pwd}, connect_timeout = 10)
         c.put("./runcode/running/a.py",'./runcode/running/a.py')
         c.close()
         self.test_py_code(filename)
@@ -59,42 +58,6 @@ class RunPyCode(object):
                     flag = 1
                     break
                 if s.find(b'poweroff') != -1:
-                    flag = 1
-                    break
-                if s.find(b'led') != -1:
-                    flag = 1
-                    break
-                if s.find(b'GPIO.setup(8, GPIO.OUT, initial=GPIO.LOW)') != -1:
-                    flag = 1
-                    break
-                if s.find(b'LED') != -1:
-                    flag = 1
-                    break
-                if s.find(b'GPIO.setup(9, GPIO.OUT, initial=GPIO.LOW)') != -1:
-                    flag = 1
-                    break
-                if s.find(b'GPIO.setup(10, GPIO.OUT, initial=GPIO.LOW)') != -1:
-                    flag = 1
-                    break
-                if s.find(b'GPIO.setup(11, GPIO.OUT, initial=GPIO.LOW)') != -1:
-                    flag = 1
-                    break
-                if s.find(b'GPIO.setup(13, GPIO.OUT, initial=GPIO.LOW)') != -1:
-                    flag = 1
-                    break
-                if s.find(b'GPIO.setup(14, GPIO.OUT, initial=GPIO.LOW)') != -1:
-                    flag = 1
-                    break
-                if s.find(b'GPIO.setup(15, GPIO.OUT, initial=GPIO.LOW)') != -1:
-                    flag = 1
-                    break
-                if s.find(b'GPIO.setup(16, GPIO.OUT, initial=GPIO.LOW)') != -1:
-                    flag = 1
-                    break
-                if s.find(b'GPIO.setup(17, GPIO.OUT, initial=GPIO.LOW)') != -1:
-                    flag = 1
-                    break
-                if s.find(b'GPIO.setup(18, GPIO.OUT, initial=GPIO.LOW)') != -1:
                     flag = 1
                     break
                 else:

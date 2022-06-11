@@ -1,29 +1,50 @@
 from django.shortcuts import render
-from django.shortcuts import redirect
-
 from django.contrib.auth.decorators import login_required
+from django.core.files.base import ContentFile
+from django.utils import timezone
+from django.core.files import File
+from django.views.decorators.csrf import csrf_exempt
+from django.http import HttpResponseRedirect
 
 import os
-from time import sleep
-from django.utils import timezone
 import subprocess
+from time import sleep
+from fabric import Connection
+
 from .models import Pycode,UserVids
 import runcode.execcode as exec
-from django.core.files.base import ContentFile
 
 from django_tables2 import RequestConfig
 from .tables import PycodeTable, UserVidsTable
 
-from django.contrib.auth.decorators import user_passes_test
-from django.core.files import File
-from django.views.decorators.csrf import csrf_exempt
+from mysite.settings import pi_ip, pi_pwd
 
-from django.http import HttpResponseRedirect
+default_py_code = """import RPi.GPIO as GPIO # using RPi.GPIO module
+from time import sleep # import function sleep for delay
 
-from fabric import Connection
-from mysite.settings import pi_ip
+GPIO.setmode(GPIO.BCM) # GPIO numbering
+GPIO.setwarnings(False) # enable warning from GPIO
 
-default_py_code = """print("Hello Python World!!")"""
+AN = 23 # set pwm2 pin on MDDS10 to GPIO 25
+DIG = 24 # set dir2 pin on MDDS10 to GPIO 23
+
+GPIO.setup(AN, GPIO.OUT) # set pin as output
+GPIO.setup(DIG, GPIO.OUT) # set pin as output
+
+sleep(1) # delay for 1 seconds
+p = GPIO.PWM(AN, 100) # set pwm for M1
+
+print("Anti-clockwise") # display "Forward" when program executed
+GPIO.output(DIG, GPIO.HIGH) # set DIG1 as high, dir2 = forward
+p.start(50) # set speed for M1, speed=0 – 100
+sleep(5) # delay for 1 seconds
+        
+print("Clockwise") # display "Backward" when program executed
+GPIO.output(DIG, GPIO.LOW) # set DIG2 as low, DIR = backward
+p.start(50) # set speed for M2, speed=0 – 100
+sleep(5) # delay for 1 seconds
+
+p.start(0)"""
 
 default_rows = "7"
 default_cols = "70"
@@ -31,31 +52,14 @@ default_cols = "70"
 @login_required
 def py(request):
     if request.method == 'POST':
-        global filename_global
-        filename_global = 'user_{0}_{1}'.format(request.user.id, request.user.username)
-        with open('./runcode/motion.conf') as fin, open('./runcode/motion_new.conf','w') as fout:
-            for i, item in enumerate(fin,1):
-                if i == 450:    # 450 - dir for saving stuff
-                    item = 'target_dir "'+'/home/pi/runcode/data/videos/'+filename_global+'"\n'
-                    print(item)
-                if i == 473:    # 473 - filename pattern
-                    global f
-                    f = request.user.username + '-' + timezone.now().strftime('%d-%m-%y_%H-%M-%S')
-                    # f_global = f
-                    item = 'movie_filename '+f+'\n'
-                    print(item)
-                fout.write(item)
-        c = Connection(host=pi_ip, user='pi', connect_kwargs={'password': 'rpi'})
-        c.put('./runcode/motion_new.conf','runcode/motion_new.conf')
-        cmd = ' echo rpi | sudo -S motion -b -c '+'./runcode/motion_new.conf'
-        c.run(cmd)
-        global a
-        a = 1
-        sleep(5)   
         code = request.POST.get('code')
-        #print(code)
+        print(code)
         run = exec.RunPyCode(code)
+        print(run)
         rescompil, resrun = run.run_py_code()
+        resrun=resrun
+        rescomp=rescompil
+        print(resrun)
         if not resrun:
             resrun = 'No result!'
         print(request.user.logged_in_user.session_key)
@@ -72,35 +76,33 @@ def py(request):
     return render(request, 'runcode/post_list.html', {'code': code,'target': "runpy",'resrun': resrun,'rescomp': rescompil,'vid_url':'http://'+pi_ip+':8081',
                                                       'rows': default_rows, 'cols': default_cols})
 
-#global a
 a = 0
 
-# @csrf_exempt
-# @login_required
-# def start_vid(request):
-#     global filename_global
-#     filename_global = 'user_{0}_{1}'.format(request.user.id, request.user.username)
-#     with open('./runcode/motion.conf') as fin, open('./runcode/motion_new.conf','w') as fout:
-#         for i, item in enumerate(fin,1):
-#             if i == 450:    # 450 - dir for saving stuff
-#                 item = 'target_dir "'+'/home/pi/runcode/data/videos/'+filename_global+'"\n'
-#                 print(item)
-#             if i == 473:    # 473 - filename pattern
-#                 global f
-#                 f = request.user.username + '-' + timezone.now().strftime('%d-%m-%y_%H-%M-%S')
-#                 # f_global = f
-#                 item = 'movie_filename '+f+'\n'
-#                 print(item)
-#             fout.write(item)
-#     c = Connection(host=pi_ip, user='pi', connect_kwargs={'password': 'rpi'})
-#     c.put('./runcode/motion_new.conf','runcode/motion_new.conf')
-#     cmd = ' echo rpi | sudo -S motion -b -c '+'./runcode/motion_new.conf'
-#     c.run(cmd)
-#     global a
-#     a = 1
-#     sleep(5)          # don't have any other option as of now to wait for iframe loading
-#     #return HttpResponseRedirect('/runcode/')
-#     return redirect('/runcode')
+@csrf_exempt
+@login_required
+def start_vid(request):
+    global filename_global
+    filename_global = 'user_{0}_{1}'.format(request.user.id, request.user.username)
+    with open('./runcode/motion.conf') as fin, open('./runcode/motion_new.conf','w') as fout:
+        for i, item in enumerate(fin,1):
+            if i == 450:    # 450 - dir for saving stuff
+                item = 'target_dir "'+'/home/pi/runcode/data/videos/'+filename_global+'"\n'
+                print(item)
+            if i == 473:    # 473 - filename pattern
+                global f
+                f = request.user.username + '-' + timezone.now().strftime('%d-%m-%y_%H-%M-%S')
+                # f_global = f
+                item = 'movie_filename '+f+'\n'
+                print(item)
+            fout.write(item)
+    c = Connection(host=pi_ip, user='pi', connect_kwargs={'password': pi_pwd}, connect_timeout = 10)
+    c.put('./runcode/motion_new.conf','runcode/motion_new.conf')
+    cmd = " echo "+pi_pwd+" | sudo -S motion -b -c ./runcode/motion_new.conf"
+    c.run(cmd)
+    global a
+    a = 1
+    sleep(1.5)          # don't have any other option as of now to wait for iframe loading
+    return HttpResponseRedirect('/runcode/')
 
 @csrf_exempt
 @login_required
@@ -108,7 +110,7 @@ def stop_vid(request):
     print('a=', a)
     sleep(10)
     cmd = " sudo pkill motion"
-    c = Connection(host=pi_ip, user='pi', connect_kwargs={'password': 'rpi'})
+    c = Connection(host=pi_ip, user='pi', connect_kwargs={'password': pi_pwd}, connect_timeout = 10)
     c.run(cmd)
     if a == 1:
         var = UserVids(author=request.user, postdate=timezone.now(),session=request.user.logged_in_user.session_key)
@@ -116,19 +118,16 @@ def stop_vid(request):
         f2save = c.get('/home/pi/runcode/data/videos/' + filename_global +'/' + f + '.mp4','./runcode/data/videos/'+filename_global+'/'+f + '.mp4')
         fopen = open('./runcode/data/videos/' + filename_global +'/' + f + '.mp4', 'rb')
         var.uservid.save('videos/'+filename_global+'/'+ f + '.mp4', File(fopen))
-        cmd2 = "echo rpi | sudo -S rm -rf ./runcode/data/videos"
+        cmd2 = " echo "+pi_pwd+" | sudo -S rm -rf ./runcode/data/videos"
         c.run(cmd2)
         c.close()
         cmd2 = " python3 /home/pi/runcode/stopit.py"
-        p = subprocess.Popen("sshpass -p rpi ssh -p22 pi@" + pi_ip + cmd2,
+        p = subprocess.Popen("sshpass -p "+pi_pwd+" ssh -p22 pi@" + pi_ip + cmd2,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         p.communicate()
-        #os.remove(os.getcwd() + ')
-        #return HttpResponseRedirect('/runcode/')
-        return redirect('/runcode')
+        return HttpResponseRedirect('/runcode/')
     else:
-        #return HttpResponseRedirect('/runcode/')
-        return redirect('/runcode')
+        return HttpResponseRedirect('/runcode/')
 
 def unique(list1): 
     # intilize a null list 
@@ -149,7 +148,6 @@ def logtable(request):
         user_videos = UserVids.objects.all()
         unique_sessions = unique(Pycode.objects.all())
         table2 = UserVidsTable(UserVids.objects.all())
-        #table3 =
     else:
         table = PycodeTable(Pycode.objects.filter(author = request.user.id))
         user_data = Pycode.objects.filter(author = request.user.id)
